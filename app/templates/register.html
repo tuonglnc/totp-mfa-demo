@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Create Account{% endblock %}
+
+{% block body %}
+<div class="bg-animated"></div>
+<div class="auth-container">
+  <div class="auth-card">
+
+    <div class="brand">
+      <div class="brand-icon">🔐</div>
+      <div class="brand-title">TDTU MFA Demo</div>
+      <div class="brand-subtitle">Create a secured account</div>
+    </div>
+
+    <h1 class="page-title text-center">Create Account</h1>
+    <p class="page-subtitle text-center">Set up your account with 2FA from the start</p>
+
+    <div id="alert-area"></div>
+
+    <form id="register-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <input class="form-input" type="text" id="username" name="username"
+          placeholder="Choose a username (min 3 chars)" autocomplete="username"
+          required minlength="3" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Email</label>
+        <input class="form-input" type="email" id="email" name="email"
+          placeholder="your@email.com" autocomplete="email"
+          required />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <div style="position:relative">
+          <input class="form-input" type="password" id="password" name="password"
+            placeholder="At least 8 characters" autocomplete="new-password"
+            required minlength="8" />
+          <span class="form-input-icon" id="toggle-pwd">👁</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="confirm-password">Confirm Password</label>
+        <input class="form-input" type="password" id="confirm-password"
+          placeholder="Repeat password" required />
+      </div>
+
+      <button type="submit" id="register-btn" class="btn btn-primary">
+        <span>Create Account &amp; Setup 2FA</span>
+      </button>
+    </form>
+
+    <div class="divider">or</div>
+
+    <p class="text-center text-muted">
+      Already have an account?
+      <a href="/login">Sign in</a>
+    </p>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('toggle-pwd').addEventListener('click', function() {
+  const pwd = document.getElementById('password');
+  pwd.type = pwd.type === 'password' ? 'text' : 'password';
+});
+
+document.getElementById('register-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('register-btn');
+  const alertArea = document.getElementById('alert-area');
+
+  const username = document.getElementById('username').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const confirm = document.getElementById('confirm-password').value;
+
+  if (password !== confirm) {
+    alertArea.innerHTML = '<div class="alert alert-error">❌ Passwords do not match.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-loading"></span>';
+
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      // Store user_id for enrollment
+      sessionStorage.setItem('enrolling_user_id', data.user_id);
+      alertArea.innerHTML = '<div class="alert alert-success">✅ Account created! Setting up 2FA...</div>';
+      setTimeout(() => window.location.href = '/enroll-2fa', 1200);
+    } else {
+      alertArea.innerHTML = `<div class="alert alert-error">❌ ${data.error}</div>`;
+      btn.disabled = false;
+      btn.innerHTML = '<span>Create Account &amp; Setup 2FA</span>';
+    }
+  } catch {
+    alertArea.innerHTML = '<div class="alert alert-error">❌ Network error. Please try again.</div>';
+    btn.disabled = false;
+    btn.innerHTML = '<span>Create Account &amp; Setup 2FA</span>';
+  }
+});
+</script>
+{% endblock %}

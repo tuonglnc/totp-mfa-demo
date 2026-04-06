@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Sign In{% endblock %}
+{% block description %}Sign in to your TDTU InfoSec MFA Demo account securely.{% endblock %}
+
+{% block body %}
+<div class="bg-animated"></div>
+<div class="auth-container">
+  <div class="auth-card">
+
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div class="brand-title">TDTU MFA Demo</div>
+      <div class="brand-subtitle">Information Security — Topic 9</div>
+    </div>
+
+    <h1 class="page-title text-center">Welcome back</h1>
+    <p class="page-subtitle text-center">Sign in to your account</p>
+
+    <!-- Alert area -->
+    <div id="alert-area"></div>
+
+    <!-- Login Form -->
+    <form id="login-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <input
+          class="form-input" type="text" id="username" name="username"
+          placeholder="Enter your username" autocomplete="username"
+          required minlength="3"
+        />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <div style="position:relative">
+          <input
+            class="form-input" type="password" id="password" name="password"
+            placeholder="Enter your password" autocomplete="current-password"
+            required
+          />
+          <span class="form-input-icon" id="toggle-password" title="Show/hide password">👁</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-4" style="margin-bottom:20px">
+        <label class="check-group">
+          <input type="checkbox" id="remember-me" />
+          Remember me
+        </label>
+      </div>
+
+      <button type="submit" id="login-btn" class="btn btn-primary">
+        <span>Sign In</span>
+      </button>
+    </form>
+
+    <div class="divider">or</div>
+
+    <p class="text-center text-muted">
+      Don't have an account?
+      <a href="/register">Create account</a>
+    </p>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+{% endblock %}

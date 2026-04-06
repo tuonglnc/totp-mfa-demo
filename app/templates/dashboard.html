@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block body %}
+<div class="bg-animated"></div>
+<div class="app-layout">
+
+  <!-- Top Bar -->
+  <nav class="topbar">
+    <div class="topbar-brand">🛡️ <span>TDTU</span> MFA Demo</div>
+    <div class="topbar-user">
+      <div id="user-name" class="text-muted"></div>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-secondary btn-sm" id="logout-btn">Logout</button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <div style="margin-bottom:28px">
+      <h1 style="font-size:26px;font-weight:800">
+        Welcome back, <span id="welcome-name" style="color:var(--accent-1)">...</span> 👋
+      </h1>
+      <p class="text-muted">Your account is protected.</p>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-icon">🔐</div>
+        <div class="stat-label">2FA Status</div>
+        <div class="stat-value" id="stat-2fa" style="font-size:18px">...</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <div class="stat-label">Member Since</div>
+        <div class="stat-value" id="stat-created" style="font-size:16px">...</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🌐</div>
+        <div class="stat-label">Security Level</div>
+        <div class="stat-value" style="color:var(--success)">Strong</div>
+      </div>
+    </div>
+
+    <!-- 2FA Management -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title">🔑 Two-Factor Authentication</div>
+        <div id="2fa-badge"></div>
+      </div>
+      <p class="text-muted text-sm" style="margin-bottom:16px">
+        2FA adds an extra layer of security using a time-based one-time password (TOTP) from your authenticator app.
+      </p>
+      <div id="2fa-action-area">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- Login History -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title">📋 Recent Login Activity</div>
+      </div>
+      <div id="history-area">
+        <p class="text-muted text-sm">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Security Info -->
+    <div class="section-card" style="border-color:rgba(102,126,234,0.3)">
+      <div class="section-title" style="margin-bottom:12px">ℹ️ Security Information</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;color:var(--text-secondary)">
+        <div>• Password hashing: <strong style="color:var(--accent-1)">Argon2id</strong></div>
+        <div>• TOTP algorithm: <strong style="color:var(--accent-1)">RFC 6238 (SHA-1)</strong></div>
+        <div>• Secret encryption: <strong style="color:var(--accent-1)">AES-256-GCM</strong></div>
+        <div>• Clock tolerance: <strong style="color:var(--accent-1)">±30 seconds</strong></div>
+        <div>• Replay protection: <strong style="color:var(--success)">Enabled</strong></div>
+        <div>• Rate limiting: <strong style="color:var(--success)">Enabled</strong></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  // Fetch user status
+  const res = await fetch('/api/status');
+  if (!res.ok) { window.location.href = '/login'; return; }
+  const { user } = await res.json();
+
+  document.getElementById('welcome-name').textContent = user.username;
+  document.getElementById('user-name').textContent = user.username;
+  document.getElementById('user-avatar').textContent = user.username[0].toUpperCase();
+
+  // Stats
+  document.getElementById('stat-created').textContent =
+    new Date(user.created_at).toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric' });
+
+  // 2FA status
+  const badge = document.getElementById('2fa-badge');
+  const actionArea = document.getElementById('2fa-action-area');
+  const stat2fa = document.getElementById('stat-2fa');
+
+  if (user.is_2fa_enabled) {
+    stat2fa.innerHTML = '<span style="color:var(--success)">✅ Active</span>';
+    badge.innerHTML = '<span class="security-badge enabled">✅ Enabled</span>';
+    actionArea.innerHTML = `
+      <p class="text-sm" style="color:var(--success);margin-bottom:12px">
+        ✅ Two-Factor Authentication is active on your account.
+      </p>
+      <button class="btn btn-danger btn-sm" onclick="disable2fa()">Disable 2FA</button>`;
+  } else {
+    stat2fa.innerHTML = '<span style="color:var(--danger)">⚠️ Inactive</span>';
+    badge.innerHTML = '<span class="security-badge disabled">⚠️ Disabled</span>';
+    actionArea.innerHTML = `
+      <p class="text-sm" style="color:var(--danger);margin-bottom:12px">
+        ⚠️ Your account is not protected by 2FA. Enable it now.
+      </p>
+      <a href="/enroll-2fa" class="btn btn-primary btn-sm" style="display:inline-flex;width:auto;padding:10px 20px">
+        🔑 Enable 2FA
+      </a>`;
+  }
+
+  // Login history
+  const histRes = await fetch('/api/login-history');
+  const histData = await histRes.json();
+  const histArea = document.getElementById('history-area');
+
+  if (!histData.history || histData.history.length === 0) {
+    histArea.innerHTML = '<p class="text-muted text-sm">No login history yet.</p>';
+  } else {
+    const rows = histData.history.map(h => `
+      <tr>
+        <td>${h.type === 'totp' ? '🔐 TOTP' : h.type === 'password' ? '🔑 Password' : '📋 Enroll'}</td>
+        <td><span class="badge ${h.success ? 'badge-success' : 'badge-danger'}">
+          ${h.success ? '✅ Success' : '❌ Failed'}</span></td>
+        <td style="font-family:monospace;font-size:12px">${h.ip}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${new Date(h.at).toLocaleString()}</td>
+      </tr>`).join('');
+    histArea.innerHTML = `
+      <table class="history-table">
+        <thead>
+          <tr><th>Type</th><th>Status</th><th>IP Address</th><th>Time</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+})();
+
+// Logout
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/login';
+});
+
+async function disable2fa() {
+  if (!confirm('Are you sure you want to disable 2FA? Your account will be less secure.')) return;
+  // In a real app, require current password re-entry
+  alert('This action would require re-authentication. Implementing for demo integrity.');
+}
+</script>
+{% endblock %}

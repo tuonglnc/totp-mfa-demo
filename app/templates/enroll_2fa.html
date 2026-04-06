@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Setup Two-Factor Auth{% endblock %}
+
+{% block body %}
+<div class="bg-animated"></div>
+<div class="auth-container">
+  <div class="auth-card auth-card--wide">
+
+    <div class="brand">
+      <div class="brand-icon">🔑</div>
+      <div class="brand-title">Enable 2FA</div>
+      <div class="brand-subtitle">Secure your account with an authenticator app</div>
+    </div>
+
+    <!-- Step Indicators -->
+    <div class="steps" id="steps-indicator">
+      <div class="step active" id="step-ind-1">
+        <div class="step-circle">1</div>
+        <div class="step-label">Get App</div>
+      </div>
+      <div class="step" id="step-ind-2">
+        <div class="step-circle">2</div>
+        <div class="step-label">Scan QR</div>
+      </div>
+      <div class="step" id="step-ind-3">
+        <div class="step-circle">3</div>
+        <div class="step-label">Verify</div>
+      </div>
+    </div>
+
+    <div id="alert-area"></div>
+
+    <!-- Step 1: Get App -->
+    <div id="step-1">
+      <h2 class="text-center" style="margin-bottom:12px">Step 1: Get Authenticator App</h2>
+      <p class="text-center text-muted" style="margin-bottom:24px; font-size:14px">
+        Download one of these supported authenticator apps on your phone:
+      </p>
+      <div style="display:grid;gap:12px;margin-bottom:28px">
+        <div class="section-card" style="padding:16px;display:flex;align-items:center;gap:12px">
+          <span style="font-size:28px">🔐</span>
+          <div>
+            <div style="font-weight:600">Google Authenticator</div>
+            <div class="text-muted text-sm">iOS App Store / Google Play</div>
+          </div>
+        </div>
+        <div class="section-card" style="padding:16px;display:flex;align-items:center;gap:12px">
+          <span style="font-size:28px">🛡️</span>
+          <div>
+            <div style="font-weight:600">Authy</div>
+            <div class="text-muted text-sm">iOS / Android / Desktop</div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="step1-next">I have the app →</button>
+    </div>
+
+    <!-- Step 2: Scan QR -->
+    <div id="step-2" class="hidden">
+      <h2 class="text-center" style="margin-bottom:12px">Step 2: Scan QR Code</h2>
+      <p class="text-center text-muted" style="margin-bottom:20px;font-size:14px">
+        Open your authenticator app and scan this QR code:
+      </p>
+
+      <div class="qr-section">
+        <div id="qr-loading" class="text-muted text-center">⏳ Generating QR code...</div>
+        <div id="qr-wrapper" class="qr-wrapper hidden" style="margin:0 auto;width:fit-content">
+          <img id="qr-image" src="" alt="TOTP QR Code" />
+        </div>
+      </div>
+
+      <div style="margin-top:20px">
+        <p class="text-sm text-muted text-center" style="margin-bottom:8px">
+          Can't scan? Enter this key manually:
+        </p>
+        <div class="secret-key" id="secret-display">Loading...</div>
+        <p class="text-sm text-muted text-center mt-4" style="margin-top:8px">
+          Click the key above to select it, then copy into your app.
+        </p>
+      </div>
+
+      <button class="btn btn-primary" id="step2-next" style="margin-top:24px">
+        I've added the account →
+      </button>
+      <button class="btn btn-secondary" id="step2-back" style="margin-top:10px">← Back</button>
+    </div>
+
+    <!-- Step 3: Verify -->
+    <div id="step-3" class="hidden">
+      <h2 class="text-center" style="margin-bottom:12px">Step 3: Verify Setup</h2>
+      <p class="text-center text-muted" style="margin-bottom:8px;font-size:14px">
+        Enter the 6-digit code from your app to confirm it's working:
+      </p>
+
+      <div class="otp-container">
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="e0" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="e1" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="e2" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="e3" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="e4" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="e5" />
+      </div>
+
+      <button class="btn btn-primary" id="confirm-btn" disabled>
+        <span>✅ Confirm &amp; Enable 2FA</span>
+      </button>
+      <button class="btn btn-secondary" id="step3-back" style="margin-top:10px">← Back</button>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/enroll.js') }}"></script>
+{% endblock %}

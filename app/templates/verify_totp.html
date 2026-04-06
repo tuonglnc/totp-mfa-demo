@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Verify Identity{% endblock %}
+
+{% block body %}
+<div class="bg-animated"></div>
+<div class="auth-container">
+  <div class="auth-card">
+
+    <div class="brand">
+      <div class="brand-icon">📱</div>
+      <div class="brand-title">Two-Factor Auth</div>
+      <div class="brand-subtitle">TDTU InfoSec MFA Demo</div>
+    </div>
+
+    <h1 class="page-title text-center">Verify Your Identity</h1>
+    <p class="page-subtitle text-center">
+      Enter the 6-digit code from your authenticator app
+    </p>
+
+    <div id="alert-area"></div>
+
+    <!-- Countdown Timer -->
+    <div class="timer-container">
+      <div class="timer-ring">
+        <svg viewBox="0 0 48 48" width="56" height="56">
+          <circle class="timer-ring-bg" cx="24" cy="24" r="22"/>
+          <circle id="timer-progress" class="timer-ring-progress" cx="24" cy="24" r="22"
+                  stroke-dasharray="138" stroke-dashoffset="0"/>
+        </svg>
+        <div class="timer-ring-text" id="timer-count">30</div>
+      </div>
+      <div class="timer-label">seconds until<br/>next code</div>
+    </div>
+
+    <!-- 6-Digit OTP Input -->
+    <form id="totp-form" novalidate>
+      <div class="otp-container">
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d0" autocomplete="off" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d1" autocomplete="off" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d2" autocomplete="off" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d3" autocomplete="off" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d4" autocomplete="off" />
+        <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d5" autocomplete="off" />
+      </div>
+
+      <!-- Remaining attempts indicator -->
+      <p class="text-center text-sm text-muted" id="attempts-info" style="margin-bottom:16px"></p>
+
+      <button type="submit" id="verify-btn" class="btn btn-primary" disabled>
+        <span>Verify Code</span>
+      </button>
+    </form>
+
+    <p class="text-center text-muted mt-4">
+      <a href="/login">← Back to Login</a>
+    </p>
+
+    <div class="mt-4" style="border-top:1px solid var(--border);padding-top:16px">
+      <p class="text-sm text-muted text-center">
+        🔒 Each code is valid for 30 seconds and can only be used once.
+      </p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/verify.js') }}"></script>
+{% endblock %}
