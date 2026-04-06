@@ -1,5 +1,5 @@
 # 🛡️ Hệ Thống Xác Thực Hai Yếu Tố TOTP
-### Đồ Án Môn An Toàn Thông Tin — Chủ Đề 9
+### Đồ Án Môn Nhập Môn Bảo Mật Thông Tin — Chủ Đề 9
 
 <div align="center">
 
