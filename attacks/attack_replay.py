@@ -2,189 +2,218 @@
 """
 attacks/attack_replay.py — Scenario 2: Token Replay Attack Simulator
 =====================================================================
-Purpose: Demonstrate that a valid OTP cannot be used twice,
-even within the same 30-second time window.
+Demonstrates that a valid OTP cannot be reused, even within the same
+30-second time window.
 
-Attack scenario:
-  1. Attacker observes/steals a valid OTP (via MITM, shoulder-surfing, etc.)
+Attack premise:
+  1. Attacker observes/steals a valid OTP (shoulder-surfing, MITM, phishing)
   2. Legitimate user authenticates with that OTP
   3. Attacker tries to reuse the same OTP immediately after
 
-⚠️  Educational Purpose Only. Test only against YOUR OWN system.
+Defense demonstrated:
+  - Replay prevention via used_tokens table (SHA-256 hash tracking)
+  - UNIQUE INDEX on (user_id, token_hash, time_step) prevents duplicates
+  - Pre-verification replay check scans all steps within valid_window
+
+Key insight (why we need fresh sessions per test):
+  After a successful /api/verify-totp, the server DELETES the pending
+  session token. So to test replay, each attempt needs its own fresh
+  session obtained via /api/login.
 
 Usage:
-    python attacks/attack_replay.py --target http://localhost:5000 --secret JBSWY3DPEHPK3PXP
+    python attacks/attack_replay.py
+    python attacks/attack_replay.py --target http://localhost:5000
 """
 
 import argparse
 import time
-import pyotp
 import requests
-from datetime import datetime
+import pyotp
+
+from helpers import (
+    DEFAULT_TARGET,
+    DEFAULT_PASSWORD,
+    print_header,
+    setup_2fa_user,
+    get_fresh_session,
+    wait_for_fresh_window,
+    time_step_info,
+)
 
 
-TARGET_URL = "http://localhost:5000"
-
-
-def get_current_time_step() -> int:
-    return int(time.time()) // 30
-
-
-def seconds_remaining_in_window() -> int:
-    return 30 - (int(time.time()) % 30)
-
-
-def run_replay_tests(base_url: str, session_token: str, secret: str) -> dict:
+def run_replay_tests(base_url: str, username: str, secret: str) -> dict:
     """
-    Run the complete replay attack test suite.
+    Run 4 replay attack tests, each with a fresh session token.
 
     Tests:
-    1. First use (legitimate authentication) — should SUCCEED
-    2. Immediate replay — should FAIL
-    3. 5-second delayed replay (same window) — should FAIL
-    4. Adjacent window code replay (if window ≥ 1) — should FAIL if already used
+      1. First use (legitimate)    -> EXPECTED: 200 OK
+      2. Immediate replay          -> EXPECTED: 401 "already used"
+      3. Delayed replay (5s later) -> EXPECTED: 401 "already used"
+      4. Adjacent window code      -> EXPECTED: 200 OK (different, unused code)
     """
     totp = pyotp.TOTP(secret)
-    current_code = totp.now()
-    step = get_current_time_step()
-    remaining = seconds_remaining_in_window()
+    step, remaining = time_step_info()
 
-    print(f"\n{'='*60}")
-    print("SCENARIO 2: Token Replay Attack Tests")
-    print(f"{'='*60}")
-    print(f"Current OTP code:  {current_code}")
-    print(f"Current time step: {step}")
-    print(f"Time remaining:    {remaining}s in this window")
+    print(f"\n{'=' * 60}")
+    print("  SCENARIO 2: Token Replay Attack Tests")
+    print(f"{'=' * 60}")
+    print(f"  Current OTP:  {totp.now()}")
+    print(f"  Time step:    {step}")
+    print(f"  Window ends:  {remaining}s remaining")
     print()
 
+    # Wait for fresh window if < 20s remaining to avoid mid-test expiry
+    if remaining < 20:
+        wait = remaining + 1
+        print(f"  [*] Waiting {wait}s for fresh TOTP window...")
+        time.sleep(wait)
+        step, remaining = time_step_info()
+
+    current_code = totp.now()
+    next_code = totp.at(for_time=int(time.time()) + 30)  # code for next time step
+
     results = {
-        "secret": secret[:8] + "...",
-        "code": current_code,
-        "time_step": step,
         "tests": [],
         "verdict": None,
     }
 
-    def do_request(test_name: str, code: str, delay_before: float = 0) -> dict:
-        if delay_before > 0:
-            print(f"  [{test_name}] Waiting {delay_before}s before submitting...")
-            time.sleep(delay_before)
+    def do_test(test_name: str, code: str, delay: float = 0) -> dict:
+        if delay > 0:
+            print(f"  [{test_name}] Waiting {delay}s...")
+            time.sleep(delay)
 
-        print(f"  [{test_name}] Submitting code: {code}")
+        # Get a FRESH session token for each test
+        session_token = get_fresh_session(base_url, username)
+        if not session_token:
+            print(f"  [{test_name}] FAILED to get session token")
+            return {"test": test_name, "status": -1, "success": False}
+
+        print(f"  [{test_name}] Code: {code}")
         r = requests.post(
             f"{base_url}/api/verify-totp",
             json={"session_token": session_token, "totp_code": code},
             timeout=5,
         )
         data = r.json()
+        success = r.status_code == 200
+        icon = "OK" if success else "BLOCKED"
+        msg = data.get("message") or data.get("error", "")
+        print(f"  [{test_name}] -> HTTP {r.status_code} [{icon}] {msg}")
+
         result = {
             "test": test_name,
             "code": code,
             "http_status": r.status_code,
-            "response": data,
-            "success": r.status_code == 200,
+            "success": success,
+            "message": msg,
         }
-        status_icon = "✅" if r.status_code == 200 else "❌"
-        print(f"    → HTTP {r.status_code} {status_icon}: {data.get('message') or data.get('error', '')}")
         results["tests"].append(result)
         return result
 
-    # Test 1: Legitimate first use
-    print("TEST 1: First Use (Legitimate Authentication)")
-    t1 = do_request("First Use", current_code)
-
+    # ── Test 1: Legitimate first use ────────────────────────────────────
+    print("  TEST 1: First Use (Legitimate Authentication)")
+    t1 = do_test("First Use", current_code)
     if not t1["success"]:
-        print(f"\n[!] First use failed — cannot test replay. "
-              f"Check session token validity and secret correctness.")
+        print(f"\n  [!] First use failed - cannot test replay.")
+        print(f"      Possible causes: code expired, account locked, wrong secret.")
         results["verdict"] = "SETUP_FAILED"
         return results
 
-    # Test 2: Immediate replay
-    print("\nTEST 2: Immediate Replay (Same Code, ~0s After First Use)")
-    t2 = do_request("Immediate Replay", current_code)
+    # ── Test 2: Immediate replay ────────────────────────────────────────
+    print("\n  TEST 2: Immediate Replay (Same Code, New Session)")
+    t2 = do_test("Immediate Replay", current_code)
 
-    # Test 3: 5-second delayed replay
-    print("\nTEST 3: Delayed Replay (Same Code, 5s After First Use)")
-    t3 = do_request("Delayed Replay (5s)", current_code, delay_before=5)
+    # ── Test 3: Delayed replay ──────────────────────────────────────────
+    print("\n  TEST 3: Delayed Replay (Same Code, 5s Later)")
+    t3 = do_test("Delayed Replay", current_code, delay=5)
 
-    # Test 4: Cross-window check — use code from immediately adjacent step
-    print("\nTEST 4: Adjacent Window Code (Different Code, Same Window Tolerance)")
-    # Generate code for t-1 step (should still be valid with window=1, but won't be replayed)
-    prev_step_time = (step - 1) * 30 + 15
-    prev_code = totp.at(for_time=prev_step_time)
-    t4 = do_request("Adjacent Window Code", prev_code)
+    # ── Test 4: Adjacent window code (different, unused) ────────────────
+    print("\n  TEST 4: Adjacent Window Code (Different, Unused Code)")
+    print(f"  [*] Using code from next time step: {next_code}")
+    t4 = do_test("Adjacent Window", next_code)
 
-    # Verdict
-    replay1_blocked = not t2["success"]
-    replay2_blocked = not t3["success"]
-    all_blocked = replay1_blocked and replay2_blocked
+    # ── Verdict ─────────────────────────────────────────────────────────
+    replay_blocked = not t2["success"] and not t3["success"]
+    new_code_accepted = t4["success"]
 
-    if all_blocked:
+    if replay_blocked and new_code_accepted:
         results["verdict"] = "SECURE"
-        print(f"\n✅ VERDICT: SECURE — Replay attacks are blocked!")
-    else:
+    elif not replay_blocked:
         results["verdict"] = "VULNERABLE"
-        issues = []
-        if not replay1_blocked: issues.append("immediate replay succeeded")
-        if not replay2_blocked: issues.append("delayed replay succeeded")
-        print(f"\n❌ VERDICT: VULNERABLE — {', '.join(issues)}")
+    else:
+        results["verdict"] = "PARTIAL"
 
     return results
 
 
 def print_analysis(results: dict):
-    print(f"\n{'='*60}")
-    print("REPLAY ATTACK ANALYSIS")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print("  REPLAY ATTACK ANALYSIS")
+    print(f"{'=' * 60}")
 
-    for i, test in enumerate(results["tests"], 1):
-        icon = "✅" if test["success"] else "❌"
-        blocked = "" if test["success"] else " [BLOCKED]"
-        print(f"  Test {i}: {test['test']}")
-        print(f"    Code:   {test['code']}")
-        print(f"    Status: HTTP {test['http_status']} {icon}{blocked}")
-        print(f"    Msg:    {test['response'].get('message') or test['response'].get('error', '')}")
+    for t in results["tests"]:
+        icon = "[OK]" if t["success"] else "[BLOCKED]"
+        print(f"  {t['test']:25s} Code: {t['code']}  HTTP {t['http_status']} {icon}")
+        print(f"  {'':25s} {t['message']}")
         print()
 
-    print(f"Overall Verdict: {results['verdict']}")
-    print()
+    verdict = results.get("verdict", "UNKNOWN")
+    verdict_map = {
+        "SECURE": "SECURE - Replay attacks are fully blocked",
+        "VULNERABLE": "VULNERABLE - Replay prevention is NOT working",
+        "PARTIAL": "PARTIAL - Some tests passed, some failed",
+        "SETUP_FAILED": "SETUP FAILED - Could not run tests",
+    }
+    print(f"  Verdict: {verdict_map.get(verdict, verdict)}")
 
-    print("Security Mechanism Explanation:")
-    print("""
-  REPLAY PREVENTION DESIGN:
-  ─────────────────────────
-  When a TOTP code is verified successfully:
-  1. The server computes SHA-256(code) → token_hash
-  2. Records (user_id, token_hash, time_step) in used_tokens table
-  3. A UNIQUE INDEX on (user_id, token_hash, time_step) prevents duplicates
-  4. On any future verification attempt, the same (user_id, token_hash, time_step)
-     is looked up BEFORE cryptographic verification
-  5. If found → 401 "Already used" (replay detected)
+    if verdict == "SECURE":
+        print("""
+  HOW REPLAY PREVENTION WORKS:
 
-  WHY HASH THE CODE?
-  ─────────────────
-  We store SHA-256(code) rather than the plaintext code because:
-  - An attacker with DB read access should not learn what OTPs were used
-  - SHA-256 provides sufficient security for short-lived ephemeral values
-  - Lookup is still O(1) with the UNIQUE INDEX
-    """)
+  1. Pre-verification check
+     When a TOTP code is submitted, the server FIRST checks the used_tokens
+     table BEFORE doing any crypto verification. This is O(1) via the
+     UNIQUE INDEX on (user_id, token_hash, time_step).
+
+  2. Token hashing
+     The server stores SHA-256(code), never the plaintext code.
+     An attacker with DB read access cannot recover used OTPs.
+
+  3. Multi-step scanning
+     The replay check scans ALL time steps within valid_window (default: +-1).
+     This prevents replaying a code from an adjacent 30s window.
+
+  4. Database-level enforcement
+     The UNIQUE INDEX ensures that even under race conditions (two requests
+     with the same code arriving simultaneously), only one can succeed.
+     The second INSERT OR IGNORE silently fails.
+
+  Code flow (totp_engine.py:verify_totp):
+     Format check -> Replay check -> TOTP verify -> Register used token
+""")
 
 
 def main():
     parser = argparse.ArgumentParser(description="TOTP Replay Attack Simulator")
-    parser.add_argument("--target", default="http://localhost:5000")
-    parser.add_argument("--session-token", required=True,
-                        help="Pending 2FA session token from /api/login")
-    parser.add_argument("--secret", required=True,
-                        help="TOTP Base32 secret (visible during enrollment)")
+    parser.add_argument("--target", default=DEFAULT_TARGET, help="Server URL")
     args = parser.parse_args()
 
-    print(f"🎭 TOTP Replay Attack Simulator")
-    print(f"   Target:  {args.target}")
-    print(f"   Time:    {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"\n⚠️  Educational purpose only — test only on YOUR OWN system!")
+    print_header("Scenario 2: TOTP Replay Attack", args.target)
 
-    results = run_replay_tests(args.target, args.session_token, args.secret)
+    ts = int(time.time())
+    username = f"rp_victim_{ts % 100000}"
+
+    print(f"--- Setting up target user: {username} ---")
+    session_token, secret = setup_2fa_user(args.target, username)
+
+    if not session_token or not secret:
+        print("\n[!] Setup failed. Make sure the server is running.")
+        return
+
+    # Wait for fresh window so enrollment code doesn't conflict with test code
+    wait_for_fresh_window(min_remaining=22)
+
+    results = run_replay_tests(args.target, username, secret)
     print_analysis(results)
 
 
