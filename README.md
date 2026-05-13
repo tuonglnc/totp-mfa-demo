@@ -462,10 +462,6 @@ mfa-demo/
 │   ├── test_totp_engine.py          # 20 unit tests: crypto, TOTP, Argon2id
 │   └── test_auth_routes.py          # 11 integration tests: API endpoints
 │
-├── 📁 docs/
-│   ├── IMPLEMENTATION_PLAN_EN.md    # Kế hoạch 48 giờ (tiếng Anh)
-│   ├── IMPLEMENTATION_PLAN_VI.md    # Kế hoạch 48 giờ (tiếng Việt)
-│   └── STATUS_REPORT.md             # Báo cáo trạng thái
 │
 ├── run.py                           # Entry point: python run.py
 ├── requirements.txt                 # Python dependencies
