@@ -71,7 +71,7 @@ Hệ thống MFA dựa trên nguyên tắc kết hợp ít nhất hai trong ba y
 ┌───────────────────────────────────────────────────────────┐
 │              Ba Yếu Tố Xác Thực (Authentication Factors)  │
 ├───────────────────┬───────────────────┬───────────────────┤
-│  🧠 Bạn BIẾT gì  │  📱 Bạn CÓ gì     │  👁 Bạn LÀ ai    │
+│  🧠 Bạn BIẾT gì   │ 📱 Bạn CÓ gì     │  👁 Bạn LÀ ai     │
 │  Something You    │  Something You    │  Something You    │
 │       Know        │       Have        │       Are         │
 ├───────────────────┼───────────────────┼───────────────────┤
@@ -282,7 +282,7 @@ TOTP_MASTER_KEY (env var)
   PBKDF2-SHA256 (600,000 vòng lặp)
         │
         ▼
-   AES Key (256-bit) ──┐
+   AES Key (256-bit) ───┐
                         │
    IV = os.urandom(12) ─┤── AES-256-GCM ──► (ciphertext + GCM tag)
                         │
@@ -397,7 +397,7 @@ Chấp nhận: step ∈ {T-1, T, T+1}
 
 Phân tích đánh đổi bảo mật:
 ┌──────────────┬────────────┬─────────────────┬──────────────────┐
-│ valid_window │ Dung sai   │ Mã hợp lệ đồng │ P(đoán brute)    │
+│ valid_window │ Dung sai   │ Mã hợp lệ đồng  │ P(đoán brute)    │
 │              │            │ thời            │                  │
 ├──────────────┼────────────┼─────────────────┼──────────────────┤
 │ 0            │ 0 giây     │ 1 mã            │ 0.0001%          │
@@ -582,15 +582,15 @@ Mở trình duyệt và truy cập: **`http://localhost:5000`**
  │ Username     │           │ App Store /   │           │ ████████████│
  │ Email        │    →      │ Google Play   │    →      │ ██  ██  ████│
  │ Password     │           │               │           │ ████████████│
- │ [Đăng ký]   │           │ Cài và mở app │           │ [Xác nhận] │
+ │ [Đăng ký]    │           │ Cài và mở app │           │ [Xác nhận]  │
  └──────────────┘           └───────────────┘           └─────────────┘
 
 [4] Nhập mã xác minh       [5] 2FA kích hoạt          [6] Đăng nhập 2 bước
  /enroll-2fa (step 3)       /dashboard                  /login → /verify-mfa
  ┌──────────────┐           ┌───────────────┐           ┌─────────────┐
- │ [1][2][3]   │           │ ✅ 2FA Active  │           │ 🔢 ••••••   │
- │ [4][5][6]   │    →      │ Bảo mật cao   │    →      │ ⏱ 25s      │
- │ [Xác nhận] │           │               │           │ [Xác minh] │
+ │ [1][2][3]    │           │ ✅ 2FA Active│            │ 🔢 ••••••  │
+ │ [4][5][6]    │    →      │ Bảo mật cao   │    →      │ ⏱ 25s      │
+ │ [Xác nhận]   │           │               │           │ [Xác minh]  │
  └──────────────┘           └───────────────┘           └─────────────┘
 ```
 
@@ -613,9 +613,9 @@ Bước 1: Nhập mật khẩu           Bước 2: Nhập mã TOTP
 │ Welcome back       │           │ Verify Your Identity      │
 │                    │  Phase 1  │                           │
 │ Username: [     ]  │ ────────► │      ⏱ 25 giây           │
-│ Password: [     ]  │ password  │   [1][2][3][4][5][6]     │
+│ Password: [     ]  │ password  │   [1][2][3][4][5][6]      │
 │                    │  check    │                           │
-│ [Sign In]         │           │ [  Verify Code  ]         │
+│ [Sign In]          │           │ [  Verify Code  ]         │
 └────────────────────┘           └───────────────────────────┘
                                    ↓ Thành công
                               /dashboard
