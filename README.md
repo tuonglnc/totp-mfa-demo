@@ -454,6 +454,7 @@ mfa-demo/
 │   └── schema.sql                   # SQLite schema (4 tables)
 │
 ├── 📁 attacks/                      # Công cụ mô phỏng tấn công
+│   ├── helpers.py                   # Shared utilities (auto-setup user, session)
 │   ├── attack_bruteforce.py         # Kịch bản 1: Vét cạn
 │   ├── attack_replay.py             # Kịch bản 2: Phát lại token
 │   └── attack_clock_skew.py         # Kịch bản 3: Phân tích lệch đồng hồ
@@ -687,19 +688,14 @@ CREATE TABLE login_attempts (
 > **⚠️ Cảnh báo:**  
 > Các script tấn công này được tạo ra cho mục đích **giáo dục và nghiên cứu** tại môi trường lab được kiểm soát. Chỉ sử dụng trên hệ thống của chính bạn. Việc kiểm thử trái phép là vi phạm pháp luật.
 
-### Chuẩn Bị Trước Khi Chạy Attack Scripts
+### Cấu Trúc Attack Suite
 
-Để chạy Scenario 2 và 3, bạn cần `session_token` và `secret`:
+Tất cả script chia sẻ `helpers.py` cung cấp:
+- `setup_2fa_user()`: tự động đăng ký user, kích hoạt 2FA, trả về `session_token` + `secret`
+- `get_fresh_session()`: lấy session token mới khi cần
+- `print_header()`, `time_step_info()`: tiện ích hiển thị
 
-```bash
-# 1. Đăng ký + Enroll 2FA qua giao diện web
-# 2. Đăng nhập để lấy session_token
-# 3. Ghi lại secret hiển thị trong bước enroll
-
-# Hoặc dùng API trực tiếp:
-# POST /api/login → lấy session_token
-# POST /api/enroll-2fa → lấy manual_secret
-```
+> **Không cần thao tác thủ công** — các script tự tạo user test và dọn dẹp. Chỉ cần server đang chạy.
 
 ---
 
@@ -725,8 +721,8 @@ Có khóa tài khoản tiến triển:
 **Chạy script:**
 
 ```bash
-# Chế độ cơ bản (tuần tự)
-python attacks/attack_bruteforce.py --target http://localhost:5000 --max-attempts 50
+# Chế độ tuần tự (mặc định)
+python attacks/attack_bruteforce.py --target http://localhost:5000
 
 # Chế độ ngẫu nhiên
 python attacks/attack_bruteforce.py --target http://localhost:5000 --mode random
@@ -736,25 +732,52 @@ python attacks/attack_bruteforce.py --target http://localhost:5000 --mode parall
 
 # Chạy tất cả các chế độ
 python attacks/attack_bruteforce.py --target http://localhost:5000 --mode all
+
+# Tùy chỉnh số lần thử tối đa
+python attacks/attack_bruteforce.py --max-attempts 100
 ```
 
 **Kết quả mong đợi:**
 
 ```
-=== SCENARIO 1A: Sequential Brute-Force Attack ===
-  [  1] OTP=000000 → HTTP 401
-  [  2] OTP=000001 → HTTP 401
-  [  3] OTP=000002 → HTTP 401
-  [  4] OTP=000003 → HTTP 401
-  [  5] OTP=000004 → HTTP 401
+=================================================================
+  Scenario 1: TOTP Brute-Force Attack
+=================================================================
+  Target: http://localhost:5000
 
-[!] ACCOUNT LOCKED after 5 attempts!
-    Retry after: 900 seconds (15 minutes)
+--- Setting up target user: bf_victim_12345 ---
+  [+] User 'bf_victim_12345' registered
+  [+] TOTP secret generated: JBSWY3DPEHPK...
+  [+] 2FA confirmed (code: 482731)
+  [+] Pending 2FA session: a1b2c3d4e5f6...
 
-=== ATTACK ANALYSIS RESULTS ===
-✅ [PROTECTED] Account locked after 5 attempts
-P(crack in 30s) = 0.000500% (protected)
-Expected crack time: ~2.95 years with lockout
+============================================================
+  SCENARIO 1A: Sequential Brute-Force
+  Trying codes 000000 to 000049
+============================================================
+  [   5] OTP=000004 -> HTTP 423
+
+  [!] ACCOUNT LOCKED after 5 attempts!
+      Retry after: 900s
+
+============================================================
+  ATTACK ANALYSIS
+============================================================
+  Mode:           sequential
+  Total attempts: 5
+  Elapsed:        0.82s
+  Rate:           6.1 req/s
+
+  Outcome:
+    [PROTECTED]  Account locked after 5 attempts
+
+  Mathematical Analysis:
+    OTP keyspace:           1,000,000 (6 digits)
+    Attempts before block:  5
+    P(guess in 30s window) = 0.018300%
+    P(guess before lockout) = 0.000500%
+    Windows needed to scan: 200,000
+    Expected time to crack: 69.4 days
 ```
 
 ---
@@ -765,42 +788,83 @@ Expected crack time: ~2.95 years with lockout
 
 **Kịch bản tấn công:**
 ```
-T=0s:  Người dùng hợp pháp gửi OTP "482.731" → Đăng nhập thành công
-T=2s:  Kẻ tấn công (đã đánh cắp OTP) gửi lại "482.731" → ?
-T=15s: Kẻ tấn công thử lại trong cùng cửa sổ → ?
+T=0s:  Người dùng hợp pháp gửi OTP "482731" → Đăng nhập thành công
+T=2s:  Kẻ tấn công (đã đánh cắp OTP) gửi lại "482731" → ?
+T=5s:  Kẻ tấn công thử lại trong cùng cửa sổ → ?
+T=?:   Kẻ tấn công dùng mã từ cửa sổ tiếp theo → ?
 ```
 
 **Chạy script:**
 
 ```bash
-python attacks/attack_replay.py \
-  --target http://localhost:5000 \
-  --session-token <TOKEN_TU_LOGIN> \
-  --secret <BASE32_SECRET_TU_ENROLL>
+python attacks/attack_replay.py --target http://localhost:5000
 ```
+
+> Script tự động tạo user, enroll 2FA, và chạy 4 test. Không cần cung cấp `session_token` hay `secret`.
 
 **Kết quả mong đợi:**
 
 ```
-=== SCENARIO 2: Token Replay Attack Tests ===
-Current OTP code:  482731
-Current time step: 57249876
-Time remaining:    23s in this window
+=================================================================
+  Scenario 2: TOTP Replay Attack
+=================================================================
+  Target: http://localhost:5000
 
-TEST 1: First Use (Legitimate Authentication)
-  [First Use] Submitting code: 482731
-    → HTTP 200 ✅: Authentication successful.
+--- Setting up target user: rp_victim_12345 ---
+  [+] User 'rp_victim_12345' registered
+  [+] TOTP secret generated: JBSWY3DPEHPK...
+  [+] 2FA confirmed (code: 482731)
+  [+] Pending 2FA session: a1b2c3d4e5f6...
+  [*] Waiting 8s for next TOTP window...
 
-TEST 2: Immediate Replay (Same Code, ~0s After First Use)
-  [Immediate Replay] Submitting code: 482731
-    → HTTP 401 ❌: This code has already been used.
+============================================================
+  SCENARIO 2: Token Replay Attack Tests
+============================================================
+  Current OTP:  918234
+  Time step:    57249877
+  Window ends:  28s remaining
 
-TEST 3: Delayed Replay (Same Code, 5s After First Use)
-  [Delayed Replay (5s)] Waiting 5s...
-  [Delayed Replay (5s)] Submitting code: 482731
-    → HTTP 401 ❌: This code has already been used.
+  TEST 1: First Use (Legitimate Authentication)
+  [First Use] Code: 918234
+  [First Use] -> HTTP 200 [OK] Authentication successful.
 
-✅ VERDICT: SECURE — Replay attacks are blocked!
+  TEST 2: Immediate Replay (Same Code, New Session)
+  [Immediate Replay] Code: 918234
+  [Immediate Replay] -> HTTP 401 [BLOCKED] This code has already been used.
+
+  TEST 3: Delayed Replay (Same Code, 5s Later)
+  [Delayed Replay] Waiting 5s...
+  [Delayed Replay] Code: 918234
+  [Delayed Replay] -> HTTP 401 [BLOCKED] This code has already been used.
+
+  TEST 4: Adjacent Window Code (Different, Unused Code)
+  [*] Using code from next time step: 572634
+  [Adjacent Window] Code: 572634
+  [Adjacent Window] -> HTTP 200 [OK] Authentication successful.
+
+============================================================
+  REPLAY ATTACK ANALYSIS
+============================================================
+  First Use              Code: 918234  HTTP 200 [OK]
+  Immediate Replay       Code: 918234  HTTP 401 [BLOCKED]
+  Delayed Replay         Code: 918234  HTTP 401 [BLOCKED]
+  Adjacent Window        Code: 572634  HTTP 200 [OK]
+
+  Verdict: SECURE - Replay attacks are fully blocked
+
+  HOW REPLAY PREVENTION WORKS:
+
+  1. Pre-verification check
+     Server checks used_tokens table BEFORE crypto verification (O(1)).
+
+  2. Token hashing
+     Stores SHA-256(code), never plaintext.
+
+  3. Multi-step scanning
+     Checks ALL time steps within valid_window (default: +-1).
+
+  4. Database-level enforcement
+     UNIQUE INDEX prevents race conditions.
 ```
 
 ---
@@ -812,48 +876,63 @@ TEST 3: Delayed Replay (Same Code, 5s After First Use)
 **Chạy script:**
 
 ```bash
-# Phân tích từ -180s đến +180s (bước 15s)
-python attacks/attack_clock_skew.py \
-  --target http://localhost:5000 \
-  --session-token <TOKEN_TU_LOGIN> \
-  --secret <BASE32_SECRET_TU_ENROLL> \
-  --range 180 --step 15
+# Mặc định: -90s đến +90s, bước 30s
+python attacks/attack_clock_skew.py --target http://localhost:5000
 
-# Kèm so sánh implementation thủ công vs pyotp
-python attacks/attack_clock_skew.py \
-  --target http://localhost:5000 \
-  --session-token <TOKEN> \
-  --secret <SECRET> \
-  --verify-impl
+# Tùy chỉnh phạm vi và bước nhảy
+python attacks/attack_clock_skew.py --range 180 --step 15
 ```
+
+> Script tự động tạo user và enroll 2FA. OTP được tính thủ công theo RFC 6238 để mô phỏng đồng hồ lệch.
 
 **Kết quả mong đợi:**
 
 ```
-=== SCENARIO 3: Clock Skew / Drift Analysis ===
-Testing offsets: -180s to +180s (step: 15s)
-Server time:     13:35:00
+=================================================================
+  Scenario 3: TOTP Clock Skew Analysis
+=================================================================
+  Target: http://localhost:5000
 
- Offset |  Steps |    OTP   |       Result | HTTP
---------+--------+----------+--------------+-----
-  -180s |     -6 | 294,018  |   ❌ REJECTED | 401
-  -165s |     -5 | 294,018  |   ❌ REJECTED | 401
-  -120s |     -4 | 157,392  |   ❌ REJECTED | 401
-   -90s |     -3 | 738,291  |   ❌ REJECTED | 401
-   -60s |     -2 | 482,011  |   ❌ REJECTED | 401
-   -45s |     -1 | 319,847  |   ✅ ACCEPTED | 200
-   -30s |     -1 | 319,847  |   ✅ ACCEPTED | 200
-   -15s |      0 | 572,634  |   ✅ ACCEPTED | 200
-     0s |      0 | 572,634  |   ✅ ACCEPTED | 200
-   +15s |      0 | 572,634  |   ✅ ACCEPTED | 200
-   +30s |     +1 | 847,219  |   ✅ ACCEPTED | 200
-   +45s |     +1 | 847,219  |   ✅ ACCEPTED | 200
-   +60s |     +2 | 103,482  |   ❌ REJECTED | 401
-   +90s |     +3 | 928,374  |   ❌ REJECTED | 401
-  +120s |     +4 | 615,829  |   ❌ REJECTED | 401
+--- Setting up target user: cs_victim_12345 ---
+  [+] User 'cs_victim_12345' registered
+  [+] TOTP secret generated: JBSWY3DPEHPK...
+  [+] 2FA confirmed (code: 482731)
+  [+] Pending 2FA session: a1b2c3d4e5f6...
 
-Accepted offset range: -45s to +45s (±1 time-step)
-→ Phù hợp với cấu hình valid_window=1 (RFC 6238 §5.2) ✅
+============================================================
+  SCENARIO 3: Clock Skew / Drift Analysis
+============================================================
+  Testing offsets: -90s to +90s (step: 30s)
+  Server time step: 57249877
+  Window remaining: 25s
+
+    Offset |   Step |      OTP |        Result | HTTP
+  ----------+--------+----------+--------------+-----
+    -90s |     -3 |   738291 |      REJECTED | 401
+    -60s |     -2 |   482011 |      REJECTED | 401
+    -30s |     -1 |   319847 |      ACCEPTED | 200
+      0s |      0 |   572634 |      ACCEPTED | 200
+    +30s |     +1 |   847219 |      ACCEPTED | 200
+    +60s |     +2 |   103482 |      REJECTED | 401
+    +90s |     +3 |   928374 |      REJECTED | 401
+
+============================================================
+  CLOCK SKEW ANALYSIS RESULTS
+============================================================
+  Accepted offset range: -30s to +30s
+    Equivalent time steps: -1 to +1
+    Total accepted range: 60s
+    Active valid codes: 3
+
+  Total tested:    7
+  Accepted:        3
+  Rejected:        4
+  Account locked:  False
+
+  RECOMMENDATION: valid_window=1 (this system's configuration)
+    - Handles normal NTP drift (phones sync within +-5s)
+    - Only 3 codes valid simultaneously (negligible security impact)
+    - RFC 6238 section 5.2 recommended default
 ```
 
 ---
